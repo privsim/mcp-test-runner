@@ -203,6 +203,8 @@ export class TestRunnerServer {
     timeout: number,
     env?: Record<string, string>
   ): Promise<ParsedResults> {
+    const tests: TestResult[] = [];
+    
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error('Test execution timed out'));
@@ -218,7 +220,7 @@ export class TestRunnerServer {
       const spawnOptions: SpawnOptions = {
         cwd: workingDir,
         env: { ...process.env, ...(env || {}) },
-        shell: false, // Disable shell to avoid issues with argument parsing
+        shell: true, // Enable shell for better command execution
       };
 
       const childProcess = spawn(cmd, cmdArgs, spawnOptions);
@@ -236,6 +238,22 @@ export class TestRunnerServer {
         const chunk = data.toString();
         stderr += chunk;
         debug('stderr chunk:', chunk);
+        
+        // Immediately create an error entry for stderr output
+        if (chunk.trim()) {
+          const errorLines = chunk.trim().split('\n');
+          if (tests.length === 0) {
+            tests.push({
+              name: 'Build Error',
+              passed: false,
+              output: errorLines
+            });
+          } else {
+            // Append to the last test's output
+            const lastTest = tests[tests.length - 1];
+            lastTest.output = lastTest.output.concat(errorLines);
+          }
+        }
       });
 
       childProcess.on('error', (error: Error) => {
@@ -325,13 +343,48 @@ export class TestRunnerServer {
     for (const line of lines) {
       debug('Processing line:', line);
 
-      // Match test result lines
-      // Example: "--- PASS: TestAdd (0.00s)"
-      // Example: "--- FAIL: TestSubtract (0.00s)"
-      // Example: "ok      package/name    0.015s"
-      // Example: "FAIL    package/name    0.015s"
-      const testMatch = line.match(/^--- (PASS|FAIL): ([^\s]+)/) ||
-                       line.match(/^(ok|FAIL)\s+(\S+)/);
+      // First check for build errors
+      const buildErrorMatch = line.match(/^(.*\.go):(\d+):(\d+):\s+(.+)$/);
+      if (buildErrorMatch) {
+        const [, file, line, col, msg] = buildErrorMatch;
+        tests.push({
+          name: `Build Error in ${file}`,
+          passed: false,
+          output: [`Line ${line}, Column ${col}: ${msg}`]
+        });
+        continue;
+      }
+
+      // Then check for test results
+      // First check for package-level results
+      const packageMatch = line.match(/^(ok|FAIL)\s+(\S+)/);
+      if (packageMatch) {
+        const [, status, packageName] = packageMatch;
+        // Only add package result if we don't already have a build error for it
+        if (!tests.some(t => t.name.includes(packageName))) {
+          tests.push({
+            name: `Package: ${packageName}`,
+            passed: status === 'ok',
+            output: [
+              `Status: ${status}`,
+              `Package: ${packageName}`,
+              line.includes('[build failed]') ? 'Build failed - see error details below' : line.trim()
+            ].filter(l => {
+              // Keep only essential information
+              return !l.trim().match(/^FAIL$/) && // Remove standalone FAIL lines
+                     !l.includes('FAIL\t') &&     // Remove FAIL tab lines
+                     !l.includes('cannot convert typeStr') && // Remove duplicate error messages
+                     !l.startsWith('# ') &&       // Remove package headers
+                     l !== line.trim();           // Remove raw output if we have a processed version
+            }).filter((item, index, arr) => arr.indexOf(item) === index) // Remove any remaining duplicates
+              .filter((item, index, arr) => arr.indexOf(item) === index)  // Remove duplicates
+          });
+        }
+        continue;
+      }
+
+      // Then check for individual test results
+      const testMatch = line.match(/^--- (PASS|FAIL): ([^\s]+)/);
       if (testMatch) {
         if (currentTest) {
           currentTest.output = currentOutput;
@@ -348,18 +401,111 @@ export class TestRunnerServer {
         continue;
       }
 
-      // Collect output for current test or build errors
+      // Log all output for debugging
+      debug('Raw line:', line);
+
+      // Collect all non-empty lines as potential output
       if (line.trim()) {
-        if (line.startsWith('# ') || line.includes('build failed')) {
-          // Capture build errors
-          if (tests.length === 0) {
+        // Always collect output for current test if we have one
+        if (currentTest) {
+          currentOutput.push(line.trim());
+        } else {
+          // Handle compiler errors and build failures
+          if (line.match(/\w+\.go:\d+:\d+:/)) {
+            // Extract file and error message
+            const [file, ...errorParts] = line.split(':');
+            const errorMsg = errorParts.join(':').trim();
+            
+            // Create a new build error entry or append to existing one
+            const lastTest = tests[tests.length - 1];
+            if (!lastTest || !lastTest.name.startsWith('Build Error')) {
+              tests.push({
+                name: `Build Error in ${file}`,
+                passed: false,
+                output: [`${errorMsg}`]
+              });
+            } else {
+              lastTest.output.push(line.trim());
+            }
+          } else if (line.includes('build failed') || line.includes('FAIL')) {
+            // Capture build failure messages
+            if (tests.length === 0) {
+              tests.push({
+                name: 'Build Failure',
+                passed: false,
+                output: [line.trim()]
+              });
+            } else {
+              tests[tests.length - 1].output.push(line.trim());
+            }
+          } else if (tests.length === 0) {
             tests.push({
-              name: 'Build',
+              name: 'Build Output',
               passed: false,
               output: [line.trim()]
             });
-          } else if (!currentTest) {
+          } else {
             tests[tests.length - 1].output.push(line.trim());
+          }
+        }
+
+        // Check for error indicators
+        const isErrorLine = line.startsWith('# ') ||
+            line.includes('build failed') ||
+            line.includes('cannot find') ||
+            line.includes('error:') ||
+            line.includes('failed running test') ||
+            line.includes('cannot convert') ||
+            line.match(/\w+\.go:\d+:\d+:/) ||  // Capture Go compiler errors
+            line.match(/FAIL\s+[\w\/\.-]+\s+/) || // Capture package FAIL lines
+            line.startsWith('FAIL') || // Capture any FAIL lines
+            line.match(/^\s*#/); // Capture any comment lines
+
+        if (isErrorLine) {
+          
+          // Handle package-level errors
+          if (line.startsWith('# ')) {
+            // Start a new package error section
+            if (currentTest) {
+              currentTest.output = currentOutput;
+              tests.push(currentTest);
+            }
+            currentTest = {
+              name: line.substring(2).trim(),
+              passed: false,
+              output: []
+            };
+            currentOutput = [];
+          } else if (tests.length === 0 || !currentTest) {
+            // Create or update error entry
+            if (tests.length === 0) {
+              tests.push({
+                name: line.includes('build failed') ? 'Build Error' : 'Package Error',
+                passed: false,
+                output: [line.trim()]
+              });
+            } else if (line.match(/\w+\.go:\d+:\d+:/)) {
+              // For compiler errors, create a new error entry
+              tests.push({
+                name: 'Compiler Error',
+                passed: false,
+                output: [line.trim()]
+              });
+            } else {
+              // Append to existing error entry
+              tests[tests.length - 1].output.push(line.trim());
+            }
+      
+            // Also capture stderr if available
+            if (stderr && !currentTest) {
+              const stderrLines = stderr.split('\n').filter(l => l.trim());
+              if (stderrLines.length > 0) {
+                tests[tests.length - 1].output.push(...stderrLines);
+              }
+            }
+          } else {
+            // Append to current test's output
+            currentOutput.push(line.trim());
           }
         } else if (currentTest) {
           // Skip test framework output lines
@@ -382,13 +528,41 @@ export class TestRunnerServer {
       tests.push(currentTest);
     }
 
-    // If no tests were parsed but we have stderr, create a failed test
-    if (tests.length === 0 && stderr) {
-      tests.push({
-        name: 'Test execution',
-        passed: false,
-        output: stderr.split('\n').filter(line => line.trim()),
-      });
+    // Process stderr for build errors
+    if (stderr) {
+      const stderrLines = stderr.split('\n').filter(line => line.trim());
+      for (const line of stderrLines) {
+        const buildErrorMatch = line.match(/^(.*\.go):(\d+):(\d+):\s+(.+)$/);
+        if (buildErrorMatch) {
+          const [, file, lineNum, col, msg] = buildErrorMatch;
+          const existingTest = tests.find(t => t.name === `Build Error in ${file}`);
+          if (existingTest) {
+            existingTest.output.push(`Line ${lineNum}, Column ${col}: ${msg}`);
+          } else {
+            tests.push({
+              name: `Build Error in ${file}`,
+              passed: false,
+              output: [
+                `File: ${file}`,
+                `Location: Line ${lineNum}, Column ${col}`,
+                `Error: ${msg}`
+              ]
+            });
+          }
+        } else if (line.includes('build failed')) {
+          const packageMatch = line.match(/FAIL\s+([\w\/\.-]+)/);
+          const packageName = packageMatch ? packageMatch[1] : 'unknown package';
+          tests.push({
+            name: 'Build Failure',
+            passed: false,
+            output: [
+              `Package: ${packageName}`,
+              `Status: Build Failed`,
+              `Details: ${line.trim()}`
+            ]
+          });
+        }
+      }
     }
 
     const results = {
@@ -653,7 +827,6 @@ export class TestRunnerServer {
     // Add last test if exists
     if (currentTest) {
       currentTest.output = currentOutput;
-      tests.push(currentTest);
     }
 
     const results = {
