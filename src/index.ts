@@ -265,7 +265,7 @@ export class TestRunnerServer {
         const summary = this.createSummary(results);
         await writeFile(join(resultDir, 'summary.txt'), summary);
 
-        if (code !== 0 && framework !== 'pytest') { // pytest returns non-zero for failed tests
+        if (code !== 0 && !['pytest', 'go'].includes(framework)) { // pytest and go return non-zero for failed tests
           reject(new Error(`Command failed with exit code ${code}\nstderr: ${stderr}`));
         } else {
           resolve(results);
@@ -328,7 +328,10 @@ export class TestRunnerServer {
       // Match test result lines
       // Example: "--- PASS: TestAdd (0.00s)"
       // Example: "--- FAIL: TestSubtract (0.00s)"
-      const testMatch = line.match(/^--- (PASS|FAIL): ([^\s]+)/);
+      // Example: "ok      package/name    0.015s"
+      // Example: "FAIL    package/name    0.015s"
+      const testMatch = line.match(/^--- (PASS|FAIL): ([^\s]+)/) ||
+                       line.match(/^(ok|FAIL)\s+(\S+)/);
       if (testMatch) {
         if (currentTest) {
           currentTest.output = currentOutput;
@@ -345,17 +348,30 @@ export class TestRunnerServer {
         continue;
       }
 
-      // Collect output for current test
-      if (currentTest && line.trim()) {
-        // Skip test framework output lines
-        if (!line.startsWith('=== RUN') &&
-            !line.startsWith('--- PASS') &&
-            !line.startsWith('--- FAIL') &&
-            !line.startsWith('PASS') &&
-            !line.startsWith('FAIL') &&
-            !line.startsWith('ok') &&
-            !line.startsWith('?')) {
-          currentOutput.push(line.trim());
+      // Collect output for current test or build errors
+      if (line.trim()) {
+        if (line.startsWith('# ') || line.includes('build failed')) {
+          // Capture build errors
+          if (tests.length === 0) {
+            tests.push({
+              name: 'Build',
+              passed: false,
+              output: [line.trim()]
+            });
+          } else if (!currentTest) {
+            tests[tests.length - 1].output.push(line.trim());
+          }
+        } else if (currentTest) {
+          // Skip test framework output lines
+          if (!line.startsWith('=== RUN') &&
+              !line.startsWith('--- PASS') &&
+              !line.startsWith('--- FAIL') &&
+              !line.startsWith('PASS') &&
+              !line.startsWith('FAIL') &&
+              !line.startsWith('ok') &&
+              !line.startsWith('?')) {
+            currentOutput.push(line.trim());
+          }
         }
       }
     }
