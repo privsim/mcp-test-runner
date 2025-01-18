@@ -21,6 +21,7 @@ interface TestRunArguments {
   framework: Framework;
   outputDir?: string;
   timeout?: number;
+  env?: Record<string, string>;
 }
 
 interface TestResult {
@@ -73,7 +74,7 @@ export class TestRunnerServer {
                   },
                   framework: {
                     type: 'string',
-                    enum: ['bats', 'pytest', 'flutter', 'jest'],
+                    enum: ['bats', 'pytest', 'flutter', 'jest', 'go'],
                     description: 'Testing framework being used',
                   },
                   outputDir: {
@@ -83,6 +84,13 @@ export class TestRunnerServer {
                   timeout: {
                     type: 'number',
                     description: 'Test execution timeout in milliseconds (default: 300000)',
+                  },
+                  env: {
+                    type: 'object',
+                    description: 'Environment variables for test execution',
+                    additionalProperties: {
+                      type: 'string'
+                    }
                   },
                 },
                 required: ['command', 'workingDir', 'framework'],
@@ -115,7 +123,7 @@ export class TestRunnerServer {
               },
               framework: {
                 type: 'string',
-                enum: ['bats', 'pytest', 'flutter', 'jest'],
+                enum: ['bats', 'pytest', 'flutter', 'jest', 'go'],
                 description: 'Testing framework being used',
               },
               outputDir: {
@@ -125,6 +133,13 @@ export class TestRunnerServer {
               timeout: {
                 type: 'number',
                 description: 'Test execution timeout in milliseconds (default: 300000)',
+              },
+              env: {
+                type: 'object',
+                description: 'Environment variables for test execution',
+                additionalProperties: {
+                  type: 'string'
+                }
               },
             },
             required: ['command', 'workingDir', 'framework'],
@@ -151,9 +166,9 @@ export class TestRunnerServer {
         throw new Error('Invalid test run arguments');
       }
 
-      const { command, workingDir, framework, outputDir = 'test_reports', timeout = DEFAULT_TIMEOUT } = args;
+      const { command, workingDir, framework, outputDir = 'test_reports', timeout = DEFAULT_TIMEOUT, env } = args;
 
-      debug('Running tests with args:', { command, workingDir, framework, outputDir, timeout });
+      debug('Running tests with args:', { command, workingDir, framework, outputDir, timeout, env });
 
       // Create output directory
       const resultDir = join(workingDir, outputDir);
@@ -161,7 +176,7 @@ export class TestRunnerServer {
 
       try {
         // Run tests with timeout
-        const results = await this.executeTestCommand(command, workingDir, framework, resultDir, timeout);
+        const results = await this.executeTestCommand(command, workingDir, framework, resultDir, timeout, args.env);
 
         return {
           content: [
@@ -185,7 +200,8 @@ export class TestRunnerServer {
     workingDir: string,
     framework: Framework,
     resultDir: string,
-    timeout: number
+    timeout: number,
+    env?: Record<string, string>
   ): Promise<ParsedResults> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -201,7 +217,7 @@ export class TestRunnerServer {
 
       const spawnOptions: SpawnOptions = {
         cwd: workingDir,
-        env: { ...process.env },
+        env: { ...process.env, ...(env || {}) },
         shell: false, // Disable shell to avoid issues with argument parsing
       };
 
@@ -267,7 +283,9 @@ export class TestRunnerServer {
       typeof a.framework === 'string' &&
       ['bats', 'pytest', 'flutter', 'jest', 'go'].includes(a.framework) &&
       (a.outputDir === undefined || typeof a.outputDir === 'string') &&
-      (a.timeout === undefined || (typeof a.timeout === 'number' && a.timeout > 0))
+      (a.timeout === undefined || (typeof a.timeout === 'number' && a.timeout > 0)) &&
+      (a.env === undefined || (typeof a.env === 'object' && a.env !== null &&
+        Object.entries(a.env).every(([key, value]) => typeof key === 'string' && typeof value === 'string')))
     );
   }
 
