@@ -4,7 +4,8 @@ import { debug } from '../utils.js';
 export class FlutterParser implements TestParser {
   parse(stdout: string, stderr: string): ParsedResults {
     debug('Parsing Flutter output');
-    const lines = stdout.split('\n');
+
+    const lines = stdout.split('\n').filter(line => line.trim());
     const tests: TestResult[] = [];
     let currentTest: TestResult | null = null;
 
@@ -23,10 +24,12 @@ export class FlutterParser implements TestParser {
           continue;
         }
 
+        // Create new test result
         currentTest = {
           name: testName.trim(),
           passed: isPassing,
           output: [],
+          rawOutput: line
         };
         tests.push(currentTest);
         continue;
@@ -35,9 +38,12 @@ export class FlutterParser implements TestParser {
       // Collect output for current test
       if (currentTest && line.trim()) {
         if (line.includes('log output:')) {
-          currentTest.output.push(line.replace('log output:', '').trim());
+          const output = line.replace('log output:', '').trim();
+          currentTest.output.push(output);
+          currentTest.rawOutput = (currentTest.rawOutput || '') + '\n' + line;
         } else if (!line.match(/^\d{2}:\d{2}/)) {
           currentTest.output.push(line.trim());
+          currentTest.rawOutput = (currentTest.rawOutput || '') + '\n' + line;
         }
       }
     }
@@ -48,6 +54,7 @@ export class FlutterParser implements TestParser {
         name: 'Test execution',
         passed: false,
         output: stderr.split('\n').filter(line => line.trim()),
+        rawOutput: stderr
       });
     }
 
@@ -55,6 +62,7 @@ export class FlutterParser implements TestParser {
       framework: 'flutter',
       tests,
       summary: this.createSummary(tests),
+      rawOutput: `${stdout}\n${stderr}`.trim()
     };
   }
 

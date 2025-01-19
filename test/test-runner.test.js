@@ -1,4 +1,4 @@
-import { TestRunnerServer } from '../build/index.js';
+import { TestRunnerServer } from '../src/index.js';
 
 class TestOnlyRunner extends TestRunnerServer {
   constructor() {
@@ -9,7 +9,21 @@ class TestOnlyRunner extends TestRunnerServer {
       close: () => Promise.resolve()
     };
   }
+
+
+  async run() {
+    // Override to prevent actual server startup
+    return Promise.resolve();
+  }
+
+  // Add cleanup method
+  async cleanup() {
+    if (this.server) {
+      await this.server.close();
+    }
+  }
 }
+
 
 describe('TestRunnerServer', () => {
   let server;
@@ -155,6 +169,20 @@ PASS
         const results = server.parseTestResults('go', stdout, '');
         expect(results.tests).toHaveLength(1);
         expect(results.tests[0].output).toContain('some test output');
+      });
+    });
+
+    describe('error handling', () => {
+      it('should handle empty input', () => {
+        const results = server.parseTestResults('bats', '', '');
+        expect(results.tests).toHaveLength(0);
+        expect(results.summary.total).toBe(0);
+      });
+
+      it('should handle stderr input', () => {
+        const results = server.parseTestResults('bats', '', 'Error occurred');
+        expect(results.tests[0].passed).toBe(false);
+        expect(results.summary.failed).toBe(1);
       });
     });
   });

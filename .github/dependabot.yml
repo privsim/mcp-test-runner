@@ -1,6 +1,5 @@
 version: 2
 updates:
-  # Enable version updates for npm
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -12,13 +11,22 @@ updates:
           - "@types/*"
           - "jest"
           - "@swc/*"
+        update-types:
+          - "minor"
+          - "patch"
       production-dependencies:
         patterns:
           - "@modelcontextprotocol/*"
+        update-types:
+          - "minor"
+          - "patch"
     
-  # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - "*"

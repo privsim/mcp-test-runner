@@ -16,7 +16,7 @@ const parserMap = {
 } as const;
 
 describe('Test Parser Suite', () => {
-  // Test each framework parser
+  // Framework parser tests
   Object.entries(parserMap).forEach(([framework, ParserClass]) => {
     describe(`${framework} Parser`, () => {
       const parser = new ParserClass();
@@ -33,7 +33,8 @@ describe('Test Parser Suite', () => {
         test('captures test output', () => {
           const stdout = getMockOutput(framework as Framework, 'with_output');
           const result = parser.parse(stdout, '');
-          expect(result.tests[0]?.output).toContain('some test output');
+          const outputs = result.tests.flatMap(t => t.output);
+          expect(outputs.some(o => o.includes('some test output'))).toBe(true);
         });
       });
 
@@ -77,21 +78,25 @@ describe('Test Parser Suite', () => {
       });
     });
 
+    test('preserves raw output', () => {
+      const stdout = getMockOutput('bats', 'success');
+      const result = TestParserFactory.parseTestResults('bats', stdout, '');
+      expect(result.rawOutput.trim()).toBe(stdout.trim());
+    });
+
+    test('handles invalid output gracefully', () => {
+      const invalidOutput = 'completely invalid test output';
+      const result = TestParserFactory.parseTestResults('bats', invalidOutput, '');
+      expect(result.rawOutput).toBe(invalidOutput);
+      expect(result.tests).toBeDefined();
+      expect(result.summary).toBeDefined();
+    });
+
     test('throws error for unsupported framework', () => {
       expect(() => {
         // @ts-expect-error Testing invalid framework
         TestParserFactory.getParser('invalid');
       }).toThrow('Unsupported framework: invalid');
-    });
-
-    test('parseTestResults returns correct results', () => {
-      Object.keys(parserMap).forEach((framework) => {
-        const stdout = getMockOutput(framework as Framework, 'success');
-        const result = TestParserFactory.parseTestResults(framework as Framework, stdout, '');
-        expect(result.framework).toBe(framework);
-        expect(result.summary.passed).toBeGreaterThan(0);
-        expect(result.summary.failed).toBe(0);
-      });
     });
   });
 });

@@ -4,12 +4,12 @@ import { debug } from '../utils.js';
 export class BatsParser implements TestParser {
   parse(stdout: string, stderr: string): ParsedResults {
     debug('Parsing Bats output');
+
     const lines = stdout.split('\n');
     const tests: TestResult[] = [];
     let currentTest: TestResult | null = null;
     let currentOutput: string[] = [];
 
-    // TAP output format parsing
     for (const line of lines) {
       debug('Processing line:', line);
       
@@ -19,6 +19,7 @@ export class BatsParser implements TestParser {
         // Save previous test if exists
         if (currentTest) {
           currentTest.output = currentOutput;
+          currentTest.rawOutput = currentOutput.join('\n') || currentTest.rawOutput;
           tests.push(currentTest);
         }
 
@@ -27,13 +28,14 @@ export class BatsParser implements TestParser {
           name: name.trim(),
           passed: status === 'ok',
           output: [],
+          rawOutput: line
         };
         currentOutput = [];
         continue;
       }
 
-      // Collect output for current test
-      if (currentTest && line.trim() && !line.startsWith('#')) {
+      // Collect output for current test if it's not a TAP directive or plan
+      if (currentTest && line.trim() && !line.startsWith('#') && !line.match(/^\d+\.\.\d+$/)) {
         currentOutput.push(line.trim());
       }
     }
@@ -41,6 +43,7 @@ export class BatsParser implements TestParser {
     // Add last test if exists
     if (currentTest) {
       currentTest.output = currentOutput;
+      currentTest.rawOutput = currentOutput.join('\n') || currentTest.rawOutput;
       tests.push(currentTest);
     }
 
@@ -50,6 +53,7 @@ export class BatsParser implements TestParser {
         name: 'Test execution',
         passed: false,
         output: stderr.split('\n').filter(line => line.trim()),
+        rawOutput: stderr
       });
     }
 
@@ -57,6 +61,7 @@ export class BatsParser implements TestParser {
       framework: 'bats',
       tests,
       summary: this.createSummary(tests),
+      rawOutput: `${stdout}\n${stderr}`.trim()
     };
   }
 

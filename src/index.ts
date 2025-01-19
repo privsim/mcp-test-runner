@@ -82,6 +82,10 @@ export class TestRunnerServer {
     this.setupTools();
   }
 
+  parseTestResults(framework: Framework, stdout: string, stderr: string): ParsedResults {
+    return TestParserFactory.parseTestResults(framework, stdout, stderr);
+  }
+
   private setupTools() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
@@ -302,7 +306,6 @@ export class TestRunnerServer {
     try {
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
-      console.error('Test Runner MCP server running on stdio');
     } catch (error) {
       console.error('Failed to start server:', error);
       process.exit(1);

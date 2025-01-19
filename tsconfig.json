@@ -8,8 +8,10 @@
     "skipLibCheck": true,
     "outDir": "build",
     "types": ["jest", "node"],
-    "declaration": true
+    "declaration": true,
+    "allowJs": true,
+    "checkJs": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "build"]
+  "exclude": ["node_modules", "build", "test/**/*"]
 }

@@ -1,3 +1,6 @@
 export const debug = (...args: any[]): void => {
-  console.error('[DEBUG]', ...args);
+  // Only output debug messages in development mode
+  if (process.env.NODE_ENV === 'development') {
+    console.error('[DEBUG]', ...args);
+  }
 };
