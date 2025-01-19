@@ -6,9 +6,10 @@ import {
   ListToolsRequestSchema,
   type Request
 } from '@modelcontextprotocol/sdk/types.js';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import type { SpawnOptions } from 'node:child_process';
 import { TestParserFactory, type Framework, type ParsedResults } from './parsers/index.js';
 import { debug } from './utils.js';
@@ -177,6 +178,32 @@ export class TestRunnerServer {
     });
   }
 
+  private getFlutterEnv(): Record<string, string> {
+    const home = homedir();
+    const flutterRoot = '/opt/homebrew/Caskroom/flutter/3.27.2/flutter';
+    const pubCache = `${home}/.pub-cache`;
+    const flutterBin = `${flutterRoot}/bin`;
+    
+    return {
+      HOME: home,
+      FLUTTER_ROOT: flutterRoot,
+      PUB_CACHE: pubCache,
+      PATH: `${flutterBin}:${process.env.PATH || ''}`
+    };
+  }
+
+  private verifyFlutterInstallation(spawnOptions: SpawnOptions): void {
+    const flutterPath = spawnSync('which', ['flutter'], spawnOptions);
+    if (flutterPath.status !== 0) {
+      throw new Error('Flutter not found in PATH. Please ensure Flutter is installed and in your PATH.');
+    }
+
+    const flutterDoctor = spawnSync('flutter', ['doctor', '--version'], spawnOptions);
+    if (flutterDoctor.status !== 0) {
+      throw new Error('Flutter installation verification failed. Please run "flutter doctor" to check your setup.');
+    }
+  }
+
   private async executeTestCommand(
     command: string,
     workingDir: string,
@@ -202,6 +229,22 @@ export class TestRunnerServer {
         env: { ...process.env, ...(env || {}) },
         shell: true, // Enable shell for better command execution
       };
+
+      // Add Flutter-specific environment if needed
+      if (framework === 'flutter') {
+        spawnOptions.env = {
+          ...spawnOptions.env,
+          ...this.getFlutterEnv()
+        };
+        
+        try {
+          this.verifyFlutterInstallation(spawnOptions);
+        } catch (error) {
+          clearTimeout(timer);
+          reject(error);
+          return;
+        }
+      }
 
       const childProcess = spawn(cmd, cmdArgs, spawnOptions);
 
@@ -247,8 +290,23 @@ export class TestRunnerServer {
         const summary = this.createSummary(results);
         await writeFile(join(resultDir, 'summary.txt'), summary);
 
-        if (code !== 0 && !['pytest', 'go'].includes(framework)) { // pytest and go return non-zero for failed tests
-          reject(new Error(`Command failed with exit code ${code}\nstderr: ${stderr}`));
+        // Handle framework-specific exit codes
+        if (code !== 0) {
+          if (['pytest', 'go'].includes(framework)) {
+            // pytest and go return non-zero for failed tests
+            resolve(results);
+          } else if (framework === 'flutter') {
+            // Flutter may return non-zero for various reasons
+            if (stderr.includes('No tests were found') || 
+                stderr.includes('Test failed') ||
+                stderr.includes('Some tests failed')) {
+              resolve(results);
+            } else {
+              reject(new Error(`Flutter test failed with exit code ${code}\nstderr: ${stderr}`));
+            }
+          } else {
+            reject(new Error(`Command failed with exit code ${code}\nstderr: ${stderr}`));
+          }
         } else {
           resolve(results);
         }

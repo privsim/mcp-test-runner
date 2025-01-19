@@ -19,7 +19,7 @@ export class BatsParser implements TestParser {
         // Save previous test if exists
         if (currentTest) {
           currentTest.output = currentOutput;
-          currentTest.rawOutput = currentOutput.join('\n') || currentTest.rawOutput;
+          currentTest.rawOutput = currentOutput.join('\n');
           tests.push(currentTest);
         }
 
@@ -34,8 +34,8 @@ export class BatsParser implements TestParser {
         continue;
       }
 
-      // Collect output for current test if it's not a TAP directive or plan
-      if (currentTest && line.trim() && !line.startsWith('#') && !line.match(/^\d+\.\.\d+$/)) {
+      // Collect all output for current test
+      if (currentTest && line.trim()) {
         currentOutput.push(line.trim());
       }
     }
@@ -43,7 +43,7 @@ export class BatsParser implements TestParser {
     // Add last test if exists
     if (currentTest) {
       currentTest.output = currentOutput;
-      currentTest.rawOutput = currentOutput.join('\n') || currentTest.rawOutput;
+      currentTest.rawOutput = currentOutput.join('\n');
       tests.push(currentTest);
     }
 

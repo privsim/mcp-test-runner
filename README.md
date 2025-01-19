@@ -28,7 +28,7 @@ The following test frameworks need to be installed for their respective test typ
 
 ### Configuration
 
-Add the test-runner to your MCP settings:
+Add the test-runner to your MCP settings (e.g., in `claude_desktop_config.json` or `cline_mcp_settings.json`):
 
 ```json
 {
@@ -37,11 +37,32 @@ Add the test-runner to your MCP settings:
       "command": "node",
       "args": ["/path/to/test-runner-mcp/build/index.js"],
       "env": {
-        "NODE_PATH": "/path/to/test-runner-mcp/node_modules"
+        "NODE_PATH": "/path/to/test-runner-mcp/node_modules",
+        // Flutter-specific environment (required for Flutter tests)
+        "FLUTTER_ROOT": "/opt/homebrew/Caskroom/flutter/3.27.2/flutter",
+        "PUB_CACHE": "/Users/username/.pub-cache",
+        "PATH": "/opt/homebrew/Caskroom/flutter/3.27.2/flutter/bin:/usr/local/bin:/usr/bin:/bin"
       }
     }
   }
 }
+```
+
+Note: For Flutter tests, ensure you replace:
+- `/opt/homebrew/Caskroom/flutter/3.27.2/flutter` with your actual Flutter installation path
+- `/Users/username/.pub-cache` with your actual pub cache path
+- Update PATH to include your system's actual paths
+
+You can find these values by running:
+```bash
+# Get Flutter root
+flutter --version
+
+# Get pub cache path
+echo $PUB_CACHE   # or default to $HOME/.pub-cache
+
+# Get Flutter binary path
+which flutter
 ```
 
 ### Running Tests
@@ -53,7 +74,9 @@ Use the `run_tests` tool with the following parameters:
   "command": "test command to execute",
   "workingDir": "working directory for test execution",
   "framework": "bats|pytest|flutter|jest|go",
-  "outputDir": "directory for test results"
+  "outputDir": "directory for test results",
+  "timeout": "test execution timeout in milliseconds (default: 300000)",
+  "env": "optional environment variables"
 }
 ```
 
@@ -81,7 +104,10 @@ Example for each framework:
   "command": "flutter test test/widget_test.dart",
   "workingDir": "/path/to/project",
   "framework": "flutter",
-  "outputDir": "test_reports"
+  "outputDir": "test_reports",
+  "FLUTTER_ROOT": "/opt/homebrew/Caskroom/flutter/3.27.2/flutter",
+  "PUB_CACHE": "/Users/username/.pub-cache",
+  "PATH": "/opt/homebrew/Caskroom/flutter/3.27.2/flutter/bin:/usr/local/bin:/usr/bin:/bin"
 }
 
 // Jest
@@ -101,27 +127,51 @@ Example for each framework:
 }
 ```
 
+### Flutter Test Support
+
+The test runner includes enhanced support for Flutter tests:
+
+1. Environment Setup
+   - Automatic Flutter environment configuration
+   - PATH and PUB_CACHE setup
+   - Flutter installation verification
+
+2. Error Handling
+   - Stack trace collection
+   - Assertion error handling
+   - Exception capture
+   - Test failure detection
+
+3. Output Processing
+   - Complete test output capture
+   - Stack trace preservation
+   - Detailed error reporting
+   - Raw output preservation
+
 ## Output Format
 
-The test runner produces structured output for all frameworks:
+The test runner produces structured output while preserving complete test output:
 
 ```typescript
 interface TestResult {
   name: string;
   passed: boolean;
   output: string[];
+  rawOutput?: string;  // Complete unprocessed output
 }
 
 interface TestSummary {
   total: number;
   passed: number;
   failed: number;
+  duration?: number;
 }
 
 interface ParsedResults {
   framework: string;
   tests: TestResult[];
   summary: TestSummary;
+  rawOutput: string;  // Complete command output
 }
 ```
 
