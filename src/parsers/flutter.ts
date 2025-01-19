@@ -5,34 +5,13 @@ export class FlutterParser implements TestParser {
   parse(stdout: string, stderr: string): ParsedResults {
     debug('Parsing Flutter output');
 
-    const lines = stdout.split('\n');
+    const lines = stdout.split('\n').filter(line => line.trim());
     const tests: TestResult[] = [];
     let currentTest: TestResult | null = null;
     let currentOutput: string[] = [];
-    let isCollectingStackTrace = false;
-    let isCollectingException = false;
 
     for (const line of lines) {
       debug('Processing line:', line);
-
-      // Check for Flutter test framework exceptions
-      if (line.includes('EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK')) {
-        isCollectingException = true;
-        if (currentTest) {
-          currentTest.passed = false;
-          currentOutput.push(line);
-        }
-        continue;
-      }
-
-      // Check for stack traces
-      if (line.match(/^#\d+\s+.*$/)) {
-        isCollectingStackTrace = true;
-        if (currentTest) {
-          currentOutput.push(line);
-        }
-        continue;
-      }
 
       // Match test status lines
       // Format: "00:01 +1: test name" or "00:01 -1: test name [E]"
@@ -41,12 +20,10 @@ export class FlutterParser implements TestParser {
         // Save previous test if exists
         if (currentTest) {
           currentTest.output = currentOutput;
-          currentTest.rawOutput = currentOutput.join('\n');
           tests.push(currentTest);
         }
 
         const [, timestamp, status, testName, error] = testMatch;
-        const isPassing = status.includes('+') && !status.includes('-') && !error;
         
         // Skip summary lines
         if (testName.includes('All tests passed') || testName.includes('loading ')) {
@@ -55,7 +32,7 @@ export class FlutterParser implements TestParser {
           continue;
         }
 
-        // Create new test result
+        const isPassing = status.includes('+') && !status.includes('-') && !error;
         currentTest = {
           name: testName.trim(),
           passed: isPassing,
@@ -63,60 +40,37 @@ export class FlutterParser implements TestParser {
           rawOutput: line
         };
         currentOutput = [];
-        isCollectingStackTrace = false;
-        isCollectingException = false;
         continue;
       }
 
-      // Handle assertion errors
-      if (line.includes('Failed assertion:') || line.includes('Expected:') || line.includes('Actual:')) {
-        if (currentTest) {
-          currentTest.passed = false;
-          currentOutput.push(line.trim());
-        }
+      // Handle log output
+      const logMatch = line.match(/^\s*log output:\s*(.+)$/);
+      if (logMatch && currentTest) {
+        const [, output] = logMatch;
+        currentOutput.push(output.trim());
         continue;
       }
 
-      // Collect output for current test
-      if (currentTest && line.trim()) {
-        // Include all output when collecting stack trace or exception
-        if (isCollectingStackTrace || isCollectingException) {
-          currentOutput.push(line.trim());
-        }
-        // Normal output collection
-        else if (line.includes('log output:')) {
-          const output = line.replace('log output:', '').trim();
-          currentOutput.push(output);
-        }
-        // Collect error messages and other output
-        else if (!line.match(/^\d{2}:\d{2}/) && !line.includes('To run this test again:')) {
-          currentOutput.push(line.trim());
-        }
-      }
-
-      // Reset collection flags on empty lines
-      if (!line.trim()) {
-        isCollectingStackTrace = false;
-        isCollectingException = false;
+      // Collect other output for current test
+      if (currentTest && line.trim() && !line.match(/^\d{2}:\d{2}/)) {
+        currentOutput.push(line.trim());
       }
     }
 
     // Add last test if exists
     if (currentTest) {
       currentTest.output = currentOutput;
-      currentTest.rawOutput = currentOutput.join('\n');
       tests.push(currentTest);
     }
 
-    // Handle stderr and framework errors
-    if ((tests.length === 0 && stderr) || stderr.includes('flutter test')) {
-      const errorTest: TestResult = {
+    // If no tests were parsed but we have stderr, create a failed test
+    if (tests.length === 0 && stderr) {
+      tests.push({
         name: 'Flutter Test Execution',
         passed: false,
         output: stderr.split('\n').filter(line => line.trim()),
         rawOutput: stderr
-      };
-      tests.push(errorTest);
+      });
     }
 
     return {

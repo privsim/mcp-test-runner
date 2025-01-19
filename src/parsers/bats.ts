@@ -5,7 +5,7 @@ export class BatsParser implements TestParser {
   parse(stdout: string, stderr: string): ParsedResults {
     debug('Parsing Bats output');
 
-    const lines = stdout.split('\n');
+    const lines = stdout.split('\n').filter(line => line.trim());
     const tests: TestResult[] = [];
     let currentTest: TestResult | null = null;
     let currentOutput: string[] = [];
@@ -19,7 +19,6 @@ export class BatsParser implements TestParser {
         // Save previous test if exists
         if (currentTest) {
           currentTest.output = currentOutput;
-          currentTest.rawOutput = currentOutput.join('\n');
           tests.push(currentTest);
         }
 
@@ -34,8 +33,8 @@ export class BatsParser implements TestParser {
         continue;
       }
 
-      // Collect all output for current test
-      if (currentTest && line.trim()) {
+      // Collect output for current test
+      if (currentTest && !line.startsWith('#')) {
         currentOutput.push(line.trim());
       }
     }
@@ -43,7 +42,6 @@ export class BatsParser implements TestParser {
     // Add last test if exists
     if (currentTest) {
       currentTest.output = currentOutput;
-      currentTest.rawOutput = currentOutput.join('\n');
       tests.push(currentTest);
     }
 
