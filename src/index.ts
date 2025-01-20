@@ -83,10 +83,6 @@ export class TestRunnerServer {
     this.setupTools();
   }
 
-  parseTestResults(framework: Framework, stdout: string, stderr: string): ParsedResults {
-    return TestParserFactory.parseTestResults(framework, stdout, stderr);
-  }
-
   private setupTools() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
@@ -159,16 +155,22 @@ export class TestRunnerServer {
 
       try {
         // Run tests with timeout
-        const results = await this.executeTestCommand(command, workingDir, framework, resultDir, timeout, args.env);
+        const { stdout, stderr } = await this.executeTestCommand(command, workingDir, framework, resultDir, timeout, args.env);
+
+        // Save raw output
+        await writeFile(join(resultDir, 'test_output.log'), stdout);
+        if (stderr) {
+          await writeFile(join(resultDir, 'test_errors.log'), stderr);
+        }
 
         return {
           content: [
             {
               type: 'text',
-              text: this.createSummary(results),
+              text: stdout + (stderr ? '\n' + stderr : ''),
             },
           ],
-          isError: results.summary.failed > 0,
+          isError: stdout.includes('failed') || stdout.includes('[E]') || stderr.length > 0,
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -188,7 +190,8 @@ export class TestRunnerServer {
       HOME: home,
       FLUTTER_ROOT: flutterRoot,
       PUB_CACHE: pubCache,
-      PATH: `${flutterBin}:${process.env.PATH || ''}`
+      PATH: `${flutterBin}:${process.env.PATH || ''}`,
+      FLUTTER_TEST: 'true'
     };
   }
 
@@ -211,7 +214,7 @@ export class TestRunnerServer {
     resultDir: string,
     timeout: number,
     env?: Record<string, string>
-  ): Promise<ParsedResults> {
+  ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error('Test execution timed out'));
@@ -227,7 +230,7 @@ export class TestRunnerServer {
       const spawnOptions: SpawnOptions = {
         cwd: workingDir,
         env: { ...process.env, ...(env || {}) },
-        shell: true, // Enable shell for better command execution
+        shell: true,
       };
 
       // Add Flutter-specific environment if needed
@@ -272,44 +275,7 @@ export class TestRunnerServer {
       childProcess.on('close', async (code: number | null) => {
         clearTimeout(timer);
         debug('Process closed with code:', code);
-
-        // Save raw output
-        await writeFile(join(resultDir, 'test_output.log'), stdout);
-        if (stderr) {
-          await writeFile(join(resultDir, 'test_errors.log'), stderr);
-        }
-
-        // Parse and format results using the factory
-        const results = TestParserFactory.parseTestResults(framework, stdout, stderr);
-        await writeFile(
-          join(resultDir, 'test_results.json'),
-          JSON.stringify(results, null, 2)
-        );
-
-        // Create human-readable summary
-        const summary = this.createSummary(results);
-        await writeFile(join(resultDir, 'summary.txt'), summary);
-
-        // Handle framework-specific exit codes
-        if (code !== 0) {
-          if (['pytest', 'go'].includes(framework)) {
-            // pytest and go return non-zero for failed tests
-            resolve(results);
-          } else if (framework === 'flutter') {
-            // Flutter may return non-zero for various reasons
-            if (stderr.includes('No tests were found') || 
-                stderr.includes('Test failed') ||
-                stderr.includes('Some tests failed')) {
-              resolve(results);
-            } else {
-              reject(new Error(`Flutter test failed with exit code ${code}\nstderr: ${stderr}`));
-            }
-          } else {
-            reject(new Error(`Command failed with exit code ${code}\nstderr: ${stderr}`));
-          }
-        } else {
-          resolve(results);
-        }
+        resolve({ stdout, stderr });
       });
     });
   }
@@ -327,37 +293,6 @@ export class TestRunnerServer {
       (a.env === undefined || (typeof a.env === 'object' && a.env !== null &&
         Object.entries(a.env).every(([key, value]) => typeof key === 'string' && typeof value === 'string')))
     );
-  }
-
-  private createSummary(results: ParsedResults): string {
-    const { framework, summary, tests } = results;
-    
-    let text = `Test Results (${framework})\n`;
-    text += '='.repeat(20) + '\n\n';
-    
-    if (summary) {
-      text += `Total Tests: ${summary.total}\n`;
-      text += `Passed: ${summary.passed}\n`;
-      text += `Failed: ${summary.failed}\n\n`;
-    }
-
-    if (tests && tests.length > 0) {
-      text += 'Test Details:\n';
-      text += '-'.repeat(12) + '\n\n';
-      
-      tests.forEach(test => {
-        text += `${test.passed ? '✓' : '✗'} ${test.name}\n`;
-        if (!test.passed && test.output.length > 0) {
-          text += 'Output:\n';
-          test.output.forEach(line => {
-            text += `  ${line}\n`;
-          });
-          text += '\n';
-        }
-      });
-    }
-
-    return text;
   }
 
   async run(): Promise<void> {
