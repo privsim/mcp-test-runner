@@ -15,7 +15,7 @@
     "test:core": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest --testPathIgnorePatterns=flutter"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.1.0"
+    "@modelcontextprotocol/sdk": "^1.5.0"
   },
   "devDependencies": {
     "@swc/core": "^1.3.96",
