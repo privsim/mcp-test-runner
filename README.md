@@ -1,5 +1,10 @@
 # Test Runner MCP
 
+*** Note: this mcp server can be used by agents to potentially run arbitrary commands, 
+this is something which can actually be quite helpful as intelligent agents will often automatically
+and naturally take debugging steps to achieve specified task; especially if every instance of execution
+for this tool is approved individually. Though I would not recommend allowing always approve execution***
+
 A Model Context Protocol (MCP) server for running and parsing test results from multiple testing frameworks. This server provides a unified interface for executing tests and processing their outputs, supporting:
 
 - Bats (Bash Automated Testing System)
