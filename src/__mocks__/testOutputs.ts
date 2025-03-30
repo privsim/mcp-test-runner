@@ -101,6 +101,81 @@ PASS
 00:01 +1: test with output
   log output: some test output
 `
+  },
+  
+  rust: {
+    success: `
+running 3 tests
+test test_addition ... ok
+test test_subtraction ... ok
+test test_multiplication ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+`,
+    failure: `
+running 3 tests
+test test_addition ... ok
+test test_subtraction ... FAILED
+test test_multiplication ... ok
+
+failures:
+
+---- test_subtraction ----
+thread 'test_subtraction' panicked at 'assertion failed: \`(left == right)\`
+  left: \`1\`,
+  right: \`0\`', tests/test_basic.rs:14:5
+
+failures:
+    test_subtraction
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+`,
+    with_output: `
+running 1 test
+test test_with_output ... ok
+Output: some test output
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+`
+  },
+  
+  generic: {
+    success: `
+=== Running Test Script ===
+Step 1: Initialization
+  - Environment set up
+  - Dependencies configured
+Step 2: Running tests
+  - All tests passed successfully
+Step 3: Cleanup
+  - Resources released
+  - Test environment cleaned up
+=== Test Script Completed Successfully ===
+`,
+    failure: `
+=== Running Test Script ===
+Step 1: Initialization
+  - Environment set up
+  - Dependencies configured
+Step 2: Running tests
+  ERROR: Test X failed: expected success but got failure
+  - Not all tests passed
+Step 3: Cleanup
+  - Resources released
+  - Test environment cleaned up
+=== Test Script Failed ===
+`,
+    with_output: `
+=== Running Test Script ===
+Step 1: Initialization
+Output: Setting up test environment
+Step 2: Running tests
+Output: Running test case A
+Output: Running test case B
+Output: All tests passed
+Step 3: Cleanup
+=== Test Script Completed Successfully ===
+`
   }
 };
 

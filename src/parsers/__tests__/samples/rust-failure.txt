@@ -1,0 +1,16 @@
+running 3 tests
+test test_addition ... ok
+test test_subtraction ... FAILED
+test test_multiplication ... ok
+
+failures:
+
+---- test_subtraction ----
+thread 'test_subtraction' panicked at 'assertion failed: `(left == right)`
+  left: `1`,
+  right: `0`', tests/test_basic.rs:14:5
+
+failures:
+    test_subtraction
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s

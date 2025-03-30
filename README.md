@@ -1,10 +1,5 @@
 # Test Runner MCP
 
-*** Note: this mcp server can be used by agents to potentially run arbitrary commands, 
-this is something which can actually be quite helpful as intelligent agents will often automatically
-and naturally take debugging steps to achieve specified task; especially if every instance of execution
-for this tool is approved individually. Though I would not recommend allowing always approve execution***
-
 A Model Context Protocol (MCP) server for running and parsing test results from multiple testing frameworks. This server provides a unified interface for executing tests and processing their outputs, supporting:
 
 - Bats (Bash Automated Testing System)
@@ -12,6 +7,8 @@ A Model Context Protocol (MCP) server for running and parsing test results from 
 - Flutter Tests
 - Jest (JavaScript Testing Framework)
 - Go Tests
+- Rust Tests (Cargo test)
+- Generic (for arbitrary command execution)
 
 ## Installation
 
@@ -28,6 +25,7 @@ The following test frameworks need to be installed for their respective test typ
 - Flutter: Follow [Flutter installation guide](https://flutter.dev/docs/get-started/install)
 - Jest: `npm install --save-dev jest`
 - Go: Follow [Go installation guide](https://go.dev/doc/install)
+- Rust: Follow [Rust installation guide](https://www.rust-lang.org/tools/install)
 
 ## Usage
 
@@ -78,10 +76,11 @@ Use the `run_tests` tool with the following parameters:
 {
   "command": "test command to execute",
   "workingDir": "working directory for test execution",
-  "framework": "bats|pytest|flutter|jest|go",
+  "framework": "bats|pytest|flutter|jest|go|rust|generic",
   "outputDir": "directory for test results",
   "timeout": "test execution timeout in milliseconds (default: 300000)",
-  "env": "optional environment variables"
+  "env": "optional environment variables",
+  "securityOptions": "optional security options for command execution"
 }
 ```
 
@@ -130,6 +129,65 @@ Example for each framework:
   "framework": "go",
   "outputDir": "test_reports"
 }
+
+// Rust
+{
+  "command": "cargo test",
+  "workingDir": "/path/to/project",
+  "framework": "rust",
+  "outputDir": "test_reports"
+}
+
+// Generic (for arbitrary commands, CI/CD tools, etc.)
+{
+  "command": "act -j build",
+  "workingDir": "/path/to/project",
+  "framework": "generic",
+  "outputDir": "test_reports"
+}
+
+// Generic with security overrides
+{
+  "command": "sudo docker-compose -f docker-compose.test.yml up",
+  "workingDir": "/path/to/project",
+  "framework": "generic",
+  "outputDir": "test_reports",
+  "securityOptions": {
+    "allowSudo": true
+  }
+}
+```
+
+### Security Features
+
+The test-runner includes built-in security features to prevent execution of potentially harmful commands, particularly for the `generic` framework:
+
+1. **Command Validation**
+   - Blocks `sudo` and `su` by default
+   - Prevents dangerous commands like `rm -rf /`
+   - Blocks file system write operations outside of safe locations
+
+2. **Environment Variable Sanitization**
+   - Filters out potentially dangerous environment variables
+   - Prevents overriding critical system variables
+   - Ensures safe path handling
+
+3. **Configurable Security**
+   - Override security restrictions when necessary via `securityOptions`
+   - Fine-grained control over security features
+   - Default safe settings for standard test usage
+
+Security options you can configure:
+
+```json
+{
+  "securityOptions": {
+    "allowSudo": false,        // Allow sudo commands
+    "allowSu": false,          // Allow su commands
+    "allowShellExpansion": true, // Allow shell expansion like $() or backticks
+    "allowPipeToFile": false   // Allow pipe to file operations (> or >>)
+  }
+}
 ```
 
 ### Flutter Test Support
@@ -152,6 +210,38 @@ The test runner includes enhanced support for Flutter tests:
    - Stack trace preservation
    - Detailed error reporting
    - Raw output preservation
+
+### Rust Test Support
+
+The test runner provides specific support for Rust's `cargo test`:
+
+1. Environment Setup
+   - Automatically sets RUST_BACKTRACE=1 for better error messages
+
+2. Output Parsing
+   - Parses individual test results
+   - Captures detailed error messages for failed tests
+   - Identifies ignored tests
+   - Extracts summary information
+
+### Generic Test Support
+
+For CI/CD pipelines, GitHub Actions via `act`, or any other command execution, the generic framework provides:
+
+1. Automatic Output Analysis
+   - Attempts to segment output into logical blocks
+   - Identifies section headers
+   - Detects pass/fail indicators
+   - Provides reasonable output structure even for unknown formats
+
+2. Flexible Integration
+   - Works with arbitrary shell commands
+   - No specific format requirements
+   - Perfect for integration with tools like `act`, Docker, and custom scripts
+
+3. Security Features
+   - Command validation to prevent harmful operations
+   - Can be configured to allow specific elevated permissions when necessary
 
 ## Output Format
 

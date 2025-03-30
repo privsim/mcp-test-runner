@@ -1,0 +1,51 @@
+[CI/Test Pipeline] 🚀  Start image=node:16
+[CI/Test Pipeline]   🐳  docker pull image=node:16 platform=linux/amd64 username= forcePull=false
+[CI/Test Pipeline]   🐳  docker create image=node:16 platform=linux/amd64 entrypoint=["tail" "-f" "/dev/null"] cmd=[]
+[CI/Test Pipeline]   🐳  docker run image=node:16 platform=linux/amd64 entrypoint=["tail" "-f" "/dev/null"] cmd=[]
+[CI/Test Pipeline] ⭐ Run Main Checkout
+[CI/Test Pipeline]   🐳  docker exec cmd=[bash --noprofile --norc -e -o pipefail /var/run/act/workflow/0] user= workdir=
+[CI/Test Pipeline]   ✅  Success - Main Checkout
+[CI/Test Pipeline] ⭐ Run Install Dependencies
+[CI/Test Pipeline]   🐳  docker exec cmd=[bash --noprofile --norc -e -o pipefail /var/run/act/workflow/1] user= workdir=
+| npm WARN deprecated har-validator@5.1.5: this library is no longer supported
+| npm WARN deprecated request@2.88.2: request has been deprecated, see https://github.com/request/request/issues/3142
+| npm WARN deprecated uuid@3.4.0: Please upgrade to version 7 or higher. Older versions may use Math.random() in certain circumstances, which is known to be problematic.
+| added 951 packages, and audited 952 packages in 40s
+| 
+| 55 packages are looking for funding
+|   run `npm fund` for details
+| 
+| found 0 vulnerabilities
+[CI/Test Pipeline]   ✅  Success - Install Dependencies
+[CI/Test Pipeline] ⭐ Run Run Tests
+[CI/Test Pipeline]   🐳  docker exec cmd=[bash --noprofile --norc -e -o pipefail /var/run/act/workflow/2] user= workdir=
+| 
+| > test
+| > jest --coverage
+| 
+| PASS  src/utils.test.js
+|   Utils
+|     ✓ adds numbers correctly (2 ms)
+|     ✓ formats strings properly (1 ms)
+| 
+| PASS  src/auth.test.js
+|   Auth
+|     ✓ validates tokens (3 ms)
+|     ✓ handles expired tokens (1 ms)
+| 
+| --------------------|---------|----------|---------|---------|-------------------
+| File                | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+| --------------------|---------|----------|---------|---------|-------------------
+| All files           |   92.31 |    83.33 |     100 |   92.31 |                   
+|  auth.js            |   88.89 |    83.33 |     100 |   88.89 | 21                
+|  utils.js           |     100 |      100 |     100 |     100 |                   
+| --------------------|---------|----------|---------|---------|-------------------
+| 
+| Test Suites: 2 passed, 2 total
+| Tests:       4 passed, 4 total
+| Snapshots:   0 total
+| Time:        1.028 s
+| Ran all test suites.
+[CI/Test Pipeline]   ✅  Success - Run Tests
+[CI/Test Pipeline] 🏁  Job succeeded
+[CI/Test Pipeline] ⚡ Job CI/Test Pipeline ran in 43s

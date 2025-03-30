@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { SpawnOptions } from 'node:child_process';
 import { TestParserFactory, type Framework, type ParsedResults } from './parsers/index.js';
+import { validateCommand, sanitizeEnvironmentVariables, type SecurityOptions } from './security.js';
 import { debug } from './utils.js';
 
 const DEFAULT_TIMEOUT = 300000; // 5 minutes
@@ -23,6 +24,7 @@ interface TestRunArguments {
   outputDir?: string;
   timeout?: number;
   env?: Record<string, string>;
+  securityOptions?: Partial<SecurityOptions>;
 }
 
 export class TestRunnerServer {
@@ -53,7 +55,7 @@ export class TestRunnerServer {
                   },
                   framework: {
                     type: 'string',
-                    enum: ['bats', 'pytest', 'flutter', 'jest', 'go'],
+                    enum: ['bats', 'pytest', 'flutter', 'jest', 'go', 'rust', 'generic'],
                     description: 'Testing framework being used',
                   },
                   outputDir: {
@@ -71,6 +73,28 @@ export class TestRunnerServer {
                       type: 'string'
                     }
                   },
+                  securityOptions: {
+                    type: 'object',
+                    description: 'Security options for command execution',
+                    properties: {
+                      allowSudo: {
+                        type: 'boolean',
+                        description: 'Allow sudo commands (default: false)'
+                      },
+                      allowSu: {
+                        type: 'boolean',
+                        description: 'Allow su commands (default: false)'
+                      },
+                      allowShellExpansion: {
+                        type: 'boolean',
+                        description: 'Allow shell expansion like $() or backticks (default: true)'
+                      },
+                      allowPipeToFile: {
+                        type: 'boolean',
+                        description: 'Allow pipe to file operations (default: false)'
+                      }
+                    }
+                  }
                 },
                 required: ['command', 'workingDir', 'framework'],
               },
@@ -81,6 +105,11 @@ export class TestRunnerServer {
     );
 
     this.setupTools();
+  }
+
+  // Add parseTestResults method to fix the tests
+  parseTestResults(framework: Framework, stdout: string, stderr: string): ParsedResults {
+    return TestParserFactory.parseTestResults(framework, stdout, stderr);
   }
 
   private setupTools() {
@@ -102,7 +131,7 @@ export class TestRunnerServer {
               },
               framework: {
                 type: 'string',
-                enum: ['bats', 'pytest', 'flutter', 'jest', 'go'],
+                enum: ['bats', 'pytest', 'flutter', 'jest', 'go', 'rust', 'generic'],
                 description: 'Testing framework being used',
               },
               outputDir: {
@@ -120,6 +149,28 @@ export class TestRunnerServer {
                   type: 'string'
                 }
               },
+              securityOptions: {
+                type: 'object',
+                description: 'Security options for command execution',
+                properties: {
+                  allowSudo: {
+                    type: 'boolean',
+                    description: 'Allow sudo commands (default: false)'
+                  },
+                  allowSu: {
+                    type: 'boolean',
+                    description: 'Allow su commands (default: false)'
+                  },
+                  allowShellExpansion: {
+                    type: 'boolean',
+                    description: 'Allow shell expansion like $() or backticks (default: true)'
+                  },
+                  allowPipeToFile: {
+                    type: 'boolean',
+                    description: 'Allow pipe to file operations (default: false)'
+                  }
+                }
+              }
             },
             required: ['command', 'workingDir', 'framework'],
           },
@@ -145,7 +196,15 @@ export class TestRunnerServer {
         throw new Error('Invalid test run arguments');
       }
 
-      const { command, workingDir, framework, outputDir = 'test_reports', timeout = DEFAULT_TIMEOUT, env } = args;
+      const { command, workingDir, framework, outputDir = 'test_reports', timeout = DEFAULT_TIMEOUT, env, securityOptions } = args;
+
+      // Validate command against security rules
+      if (framework === 'generic') {
+        const validation = validateCommand(command, securityOptions);
+        if (!validation.isValid) {
+          throw new Error(`Command validation failed: ${validation.reason}`);
+        }
+      }
 
       debug('Running tests with args:', { command, workingDir, framework, outputDir, timeout, env });
 
@@ -155,12 +214,26 @@ export class TestRunnerServer {
 
       try {
         // Run tests with timeout
-        const { stdout, stderr } = await this.executeTestCommand(command, workingDir, framework, resultDir, timeout, args.env);
+        const { stdout, stderr } = await this.executeTestCommand(command, workingDir, framework, resultDir, timeout, env, securityOptions);
 
         // Save raw output
         await writeFile(join(resultDir, 'test_output.log'), stdout);
         if (stderr) {
           await writeFile(join(resultDir, 'test_errors.log'), stderr);
+        }
+
+        // Parse the test results using the appropriate parser
+        try {
+          const results = this.parseTestResults(framework, stdout, stderr);
+          // Write parsed results to file
+          await writeFile(join(resultDir, 'test_results.json'), JSON.stringify(results, null, 2));
+          
+          // Create a summary file
+          const summaryContent = this.generateSummary(results);
+          await writeFile(join(resultDir, 'summary.txt'), summaryContent);
+        } catch (parseError) {
+          debug('Error parsing test results:', parseError);
+          // Still continue even if parsing fails
         }
 
         return {
@@ -178,6 +251,35 @@ export class TestRunnerServer {
         throw new Error(`Test execution failed: ${errorMessage}`);
       }
     });
+  }
+
+  private generateSummary(results: ParsedResults): string {
+    const { summary, framework, tests } = results;
+    let content = `Test Framework: ${framework}\n`;
+    content += `Total Tests: ${summary.total}\n`;
+    content += `Passed: ${summary.passed}\n`;
+    content += `Failed: ${summary.failed}\n`;
+    
+    if (summary.duration !== undefined) {
+      content += `Duration: ${summary.duration}ms\n`;
+    }
+    
+    content += '\n--- Test Results ---\n';
+    
+    for (const test of tests) {
+      content += `${test.passed ? '✓' : '✗'} ${test.name}\n`;
+    }
+    
+    if (summary.failed > 0) {
+      content += '\n--- Failed Tests ---\n';
+      for (const test of tests.filter(t => !t.passed)) {
+        content += `✗ ${test.name}\n`;
+        content += test.output.map(line => `  ${line}`).join('\n');
+        content += '\n\n';
+      }
+    }
+    
+    return content;
   }
 
   private getFlutterEnv(): Record<string, string> {
@@ -213,7 +315,8 @@ export class TestRunnerServer {
     framework: Framework,
     resultDir: string,
     timeout: number,
-    env?: Record<string, string>
+    env?: Record<string, string>,
+    securityOptions?: Partial<SecurityOptions>
   ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -227,13 +330,16 @@ export class TestRunnerServer {
 
       debug('Executing command:', { cmd, cmdArgs, workingDir });
 
+      // Sanitize environment variables for security
+      const safeEnv = sanitizeEnvironmentVariables(env);
+
       const spawnOptions: SpawnOptions = {
         cwd: workingDir,
-        env: { ...process.env, ...(env || {}) },
+        env: { ...process.env, ...safeEnv },
         shell: true,
       };
 
-      // Add Flutter-specific environment if needed
+      // Add framework-specific environment if needed
       if (framework === 'flutter') {
         spawnOptions.env = {
           ...spawnOptions.env,
@@ -247,6 +353,12 @@ export class TestRunnerServer {
           reject(error);
           return;
         }
+      } else if (framework === 'rust') {
+        // Ensure RUST_BACKTRACE is set for better error reporting
+        spawnOptions.env = {
+          ...spawnOptions.env,
+          RUST_BACKTRACE: '1'
+        };
       }
 
       const childProcess = spawn(cmd, cmdArgs, spawnOptions);
@@ -283,16 +395,39 @@ export class TestRunnerServer {
   private isValidTestRunArguments(args: unknown): args is TestRunArguments {
     if (typeof args !== 'object' || args === null) return false;
     const a = args as Record<string, unknown>;
-    return (
+    
+    // Check basic required params
+    const basicCheck = (
       typeof a.command === 'string' &&
       typeof a.workingDir === 'string' &&
       typeof a.framework === 'string' &&
-      ['bats', 'pytest', 'flutter', 'jest', 'go'].includes(a.framework) &&
+      ['bats', 'pytest', 'flutter', 'jest', 'go', 'rust', 'generic'].includes(a.framework) &&
       (a.outputDir === undefined || typeof a.outputDir === 'string') &&
       (a.timeout === undefined || (typeof a.timeout === 'number' && a.timeout > 0)) &&
       (a.env === undefined || (typeof a.env === 'object' && a.env !== null &&
         Object.entries(a.env).every(([key, value]) => typeof key === 'string' && typeof value === 'string')))
     );
+    
+    if (!basicCheck) return false;
+    
+    // Check securityOptions if present
+    if (a.securityOptions !== undefined) {
+      if (typeof a.securityOptions !== 'object' || a.securityOptions === null) return false;
+      
+      const s = a.securityOptions as Record<string, unknown>;
+      
+      // Check security options types
+      const securityCheck = (
+        (s.allowSudo === undefined || typeof s.allowSudo === 'boolean') &&
+        (s.allowSu === undefined || typeof s.allowSu === 'boolean') &&
+        (s.allowShellExpansion === undefined || typeof s.allowShellExpansion === 'boolean') &&
+        (s.allowPipeToFile === undefined || typeof s.allowPipeToFile === 'boolean')
+      );
+      
+      if (!securityCheck) return false;
+    }
+    
+    return true;
   }
 
   async run(): Promise<void> {

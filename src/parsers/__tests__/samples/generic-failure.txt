@@ -1,0 +1,11 @@
+=== Running Test Script ===
+Step 1: Initialization
+  - Environment set up
+  - Dependencies configured
+Step 2: Running tests
+  ERROR: Test X failed: expected success but got failure
+  - Not all tests passed
+Step 3: Cleanup
+  - Resources released
+  - Test environment cleaned up
+=== Test Script Failed ===

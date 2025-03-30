@@ -1,0 +1,7 @@
+error[E0425]: cannot find value `undefinedVar` in this scope
+  --> src/lib.rs:5:13
+   |
+5  |     println!("{}", undefinedVar);
+   |                    ^^^^^^^^^^^^ not found in this scope
+
+error: could not compile `myproject` due to previous error

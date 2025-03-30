@@ -1,6 +1,6 @@
 {
   "name": "@modelcontextprotocol/server-test-runner",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "exports": "./build/index.js",
   "scripts": {
@@ -11,7 +11,10 @@
     "test:go": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest parsers/__tests__/go.test.ts",
     "test:jest": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest parsers/__tests__/jest.test.ts",
     "test:flutter": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest parsers/__tests__/flutter.test.ts",
-    "test:all": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest parsers/__tests__/*.test.ts",
+    "test:rust": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest parsers/__tests__/rust.test.ts",
+    "test:generic": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest parsers/__tests__/generic.test.ts",
+    "test:security": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest __tests__/security.test.ts",
+    "test:all": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest parsers/__tests__/*.test.ts __tests__/*.test.ts",
     "test:core": "NODE_OPTIONS='--no-warnings' node --experimental-vm-modules node_modules/.bin/jest --testPathIgnorePatterns=flutter"
   },
   "dependencies": {

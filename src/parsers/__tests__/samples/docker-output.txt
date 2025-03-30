@@ -1,0 +1,38 @@
+Building image...
+Step 1/10 : FROM node:16
+ ---> a5a50c3e0805
+Step 2/10 : WORKDIR /app
+ ---> Using cache
+ ---> 9c40b8d12fb3
+Step 3/10 : COPY package*.json ./
+ ---> Using cache
+ ---> 8a0ef1b2a93c
+Step 4/10 : RUN npm install
+ ---> Using cache
+ ---> 7e82faa9e5e6
+Step 5/10 : COPY . .
+ ---> 123abc456def
+Step 6/10 : RUN npm test
+ ---> Running in abcdef123456
+
+> project@1.0.0 test
+> jest
+
+PASS  src/utils.test.js
+PASS  src/app.test.js
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+
+ ---> 789ghi101112
+Step 7/10 : RUN npm run build
+ ---> Running in 567jkl890123
+
+> project@1.0.0 build
+> webpack
+
+asset bundle.js 1.2 MB [emitted]
+
+ ---> 345mno678901
+Successfully built 345mno678901
+Successfully tagged myapp:latest

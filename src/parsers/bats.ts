@@ -9,6 +9,7 @@ export class BatsParser implements TestParser {
     const tests: TestResult[] = [];
     let currentTest: TestResult | null = null;
     let currentOutput: string[] = [];
+    let setupOutput: string[] = [];
 
     for (const line of lines) {
       debug('Processing line:', line);
@@ -18,7 +19,7 @@ export class BatsParser implements TestParser {
       if (testMatch) {
         // Save previous test if exists
         if (currentTest) {
-          currentTest.output = currentOutput;
+          currentTest.output = [...currentOutput];
           tests.push(currentTest);
         }
 
@@ -29,26 +30,39 @@ export class BatsParser implements TestParser {
           output: [],
           rawOutput: line
         };
-        currentOutput = [];
+        currentOutput = [...setupOutput]; // Include setup output for each test
+        continue;
+      }
+
+      // Collect comment lines that include error information or setup/teardown
+      if (line.startsWith('#')) {
+        const commentLine = line.substring(1).trim();
+        
+        if (!currentTest) {
+          // Store setup output for later tests
+          setupOutput.push(commentLine);
+        } else {
+          currentOutput.push(commentLine);
+        }
         continue;
       }
 
       // Collect output for current test
-      if (currentTest && !line.startsWith('#')) {
+      if (currentTest) {
         currentOutput.push(line.trim());
       }
     }
 
     // Add last test if exists
     if (currentTest) {
-      currentTest.output = currentOutput;
+      currentTest.output = [...currentOutput];
       tests.push(currentTest);
     }
 
     // If no tests were parsed but we have stderr, create a failed test
     if (tests.length === 0 && stderr) {
       tests.push({
-        name: 'Test execution',
+        name: 'Test Execution Error',
         passed: false,
         output: stderr.split('\n').filter(line => line.trim()),
         rawOutput: stderr

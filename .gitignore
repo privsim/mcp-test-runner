@@ -12,7 +12,19 @@ dist/
 coverage/
 .nyc_output/
 test_reports/
+framework_tests/
+simple_rust/
 .pytest_cache/
+
+# Test files
+simple.bats
+simple.test.js
+test.bats
+test_sample.py
+test-rust-parser.js
+test-security.js
+run-tests.sh
+build-and-test.sh
 
 # IDEs and editors
 .idea/

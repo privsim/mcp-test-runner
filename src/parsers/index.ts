@@ -3,10 +3,12 @@ import { JestParser } from './jest.js';
 import { PytestParser } from './pytest.js';
 import { FlutterParser } from './flutter.js';
 import { GoParser } from './go.js';
+import { RustParser } from './rust.js';
+import { GenericParser } from './generic.js';
 import { ParsedResults, TestParser } from './types.js';
 import { debug } from '../utils.js';
 
-export type Framework = 'bats' | 'pytest' | 'flutter' | 'jest' | 'go';
+export type Framework = 'bats' | 'pytest' | 'flutter' | 'jest' | 'go' | 'rust' | 'generic';
 
 export class TestParserFactory {
   private static parsers: Record<Framework, TestParser> = {
@@ -15,6 +17,8 @@ export class TestParserFactory {
     pytest: new PytestParser(),
     flutter: new FlutterParser(),
     go: new GoParser(),
+    rust: new RustParser(),
+    generic: new GenericParser(),
   };
 
   static getParser(framework: Framework): TestParser {
