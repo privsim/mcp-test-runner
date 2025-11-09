@@ -10,6 +10,8 @@ A Model Context Protocol (MCP) server for running and parsing test results from 
 - Rust Tests (Cargo test)
 - Generic (for arbitrary command execution)
 
+<a href="https://glama.ai/mcp/servers/q001c11ec3"><img width="380" height="200" src="https://glama.ai/mcp/servers/q001c11ec3/badge" alt="Test Runner MCP server" /></a>
+
 ## Installation
 
 ```bash
